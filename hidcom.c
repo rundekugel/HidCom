@@ -43,8 +43,12 @@
  #define HID_PID		0
 #endif
 
+//prototypes
+//void getStringByIdx(int fd, struct hiddev_string_descriptor HString, int index);
+//void showDesc(int fd);
 
-#if 0	//prepared for future use
+#define SHOW_DESC 0
+#if SHOW_DESC	>0 //prepared for future use
 void showDesc(int fd){
   int i,j;
   int ret;
@@ -82,8 +86,14 @@ void showDesc(int fd){
 }
 #endif
 
+void getStringByIdx(int fd,  struct hiddev_string_descriptor* HString, int index){
+    HString->index = index;
+    HString->value[0]=0;
+    ioctl(fd, HIDIOCGSTRING, HString);
+}
+
 int main (int argc, char **argv) {
-  int n=64,d=0,info=0,increment=0,p=0,vid=FREE_VID,pid=HID_PID,q=0,f=0,ctrl=0,r=1,c,i,j;
+  int n=64,d=0,info=0,increment=0,vid=FREE_VID,pid=HID_PID,q=0,f=0,ctrl=0,r=1,c,i,j;
   int stringNum = -1;
   char serial[256]= {0,0};
   char path[256],buf[256];
@@ -118,6 +128,7 @@ int main (int argc, char **argv) {
   while ((c = getopt_long (argc, argv, "cd:fhiIn:p:qv:r:s:S:",long_options,&option_index)) != -1)
      switch (c)
     {
+    case '?':
     case 'h':
     printf("hidcom $Rev: 567 $ usage:\
     \nhidCom [options] [data]\
@@ -134,7 +145,7 @@ int main (int argc, char **argv) {
     \n-q, --quiet      print response only [no]\
     \n-r, --repeat     repeat N times [1]\
     \n-s, --size       report size [64]\
-    \n-S, --String     get String N\
+    \n-S, --String     get descriptor string with given offset 0..255\
     \n-v, --vid        Vendor ID [0]\
     \n example:  HidCom -i 1 2 3 4\n");
     exit(1);
@@ -179,15 +190,17 @@ int main (int argc, char **argv) {
     case 'v':  //vid
       sscanf(optarg, "%x", &vid);
       break;
-    case '?':
-      fprintf (stderr, "Unknown option character 0x%02x (%c)\n",optopt,optopt);
-      return 1;
+    //case '?':
+      //fprintf (stderr, "Unknown option character 0x%02x (%c)\n",optopt,optopt);
+      //return 1;
     default:
-     //abort ();
+      fprintf (stderr, "Unknown option character 0x%02x (%c)\n",optopt,optopt);
+      return 1;    
+     //abort ();     
     break;
     }
 
-  for (j=0,i = optind; i < argc&&i<128; i++,j++) sscanf(argv[i], "%x", &buf[j]);
+  for (j=0,i = optind; i < argc&&i<128; i++,j++) sscanf(argv[i], "%x", (unsigned int*)&buf[j] );
   int fd = -1;
   struct hiddev_devinfo device_info;    
   if(pid && vid){
@@ -228,32 +241,37 @@ int main (int argc, char **argv) {
     printf("Applications: %i\n", device_info.num_applications);
     printf("Bus: %d Devnum: %d Ifnum: %d\n",
       device_info.busnum, device_info.devnum, device_info.ifnum);
-    ioctl(fd, HIDIOCGSTRING, &Hstring1);
-    ioctl(fd, HIDIOCGSTRING, &Hstring2);
-    printf("Path: %s\nManufacturer: %s\nProduct: %s\n",path,Hstring1.value,Hstring2.value);
-    //added for lisi
-    Hstring1.index=4;
-    Hstring2.index=32;
+
+    printf("try to read descriptor strings...\n");
+    if(device_info.vendor == 0x22c9){ //dirty hack for StepOver Devices
+      Hstring1.index=4;
+      Hstring2.index=32;
+    }
     ioctl(fd, HIDIOCGSTRING, &Hstring1);
     ioctl(fd, HIDIOCGSTRING, &Hstring2);
     printf("Path: %s\nManufacturer: %s\nProduct: %s\n",path,Hstring1.value,Hstring2.value); 
-    Hstring1.index = 82;
-    ioctl(fd, HIDIOCGSTRING, &Hstring1);
-    if(Hstring1.value[0]){
-      printf("Serial number: %s\r\n", Hstring1.value);    
-    }
-    //showDesc(fd);
-    int n=0;
-    for( i=0; i<0xff;i++){
-      Hstring1.index = i;
-      Hstring1.value[0]=0;
-      ioctl(fd, HIDIOCGSTRING, &Hstring1);
+    if(device_info.vendor == 0x22c9){ //StepOver Device
+      if(device_info.product < 4) { //bootloader
+        Hstring1.index = 54; }
+      getStringByIdx(fd, &Hstring1, Hstring1.index);
       if(Hstring1.value[0]){
-        printf("more[%d]: %s\r\n", i, Hstring1.value);
+        printf("Serial number: %s\r\n", Hstring1.value);    
+      }
+    }
+    #if SHOW_DESC	>0     
+      showDesc(fd);
+    #else
+    int n=0;
+    printf("read all strings...\n");
+    for( i=0; i<0xff;i++){
+      getStringByIdx(fd, &Hstring1, i);
+      if(Hstring1.value[0]){
+        printf("more[idx=%d]: %s\r\n", i, Hstring1.value);
         n++;
         if(n>2) i=0xffff;
       }
     }
+    #endif
   }
   
   if(stringNum >0){
@@ -282,7 +300,7 @@ int main (int argc, char **argv) {
   ref_multi_u.uref.usage_index=ref_multi_i.uref.usage_index=0;
   ref_multi_u.num_values=ref_multi_i.num_values=n;
   for(i=0;i<n;i++) ref_multi_u.values[i]=buf[i];
-  int res;
+  int res=0;
   if(f){        //use feature report
       rep_info_u.report_type=rep_info_i.report_type=HID_REPORT_TYPE_FEATURE;
       ref_multi_u.uref.report_type=ref_multi_i.uref.report_type=HID_REPORT_TYPE_FEATURE;
@@ -320,5 +338,5 @@ int main (int argc, char **argv) {
     if(increment) ref_multi_u.values[5]++; 
   }
   close(fd);
-  exit(0);
+  exit(res);
 }
