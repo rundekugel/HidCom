@@ -2,7 +2,6 @@
 Easy Linux command line tool to communicate with USB/HID devices
 
 I use it often for debugging with USB/HID. You can also use it to speak with USB/HID via bash scripts.
-
 ## Build
 build with
 
@@ -26,7 +25,8 @@ options:
 -v, --vid        Vendor ID (HEX) [0]    
 
 Select device by path or vid and pid. If not given, the /dev/usb/hiddev0 is used as default
-example:  
+
+## Example
 
     HidCom -i 1 2 3 4
   
