@@ -14,6 +14,6 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: make
-      run: make
+      run: make hidcom
     - name: simple_test
       run: ./hidcom -h
