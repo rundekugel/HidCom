@@ -13,5 +13,7 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: run
-      run: gcc hidcom.c -o hidcom
+    - name: make
+      run: make
+    - name: simple_test
+      run: ./hidcom -h
